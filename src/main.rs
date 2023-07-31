@@ -1,12 +1,13 @@
 mod schema;
 mod models;
+mod posts;
+mod engines;
 
-use rocket::serde::json::{json, Value, Json};
+use engines::{fetch_engines, create_engine, delete_engine};
+use rocket::serde::json::{json, Value};
 use rocket_diesel_shenanigans::establish_connection;
-use diesel::prelude::*;
-use serde::Deserialize;
-use crate::models::Post;
 
+use posts::{create_post, delete_post, fetch_posts};
 
 #[macro_use] extern crate rocket;
 
@@ -25,59 +26,6 @@ fn print_name(name: &str) -> String {
 fn print_json(name: &str) -> Value {
     json!({
         "name": name,
-    })
-}
-
-#[get("/posts")]
-fn fetch_posts() -> Value {
-    use crate::schema::posts::dsl::*;
-
-    let connection = &mut establish_connection();
-    let results = posts
-        .limit(5)
-        .load::<Post>(connection)
-        .expect("Error loading posts");
-
-    let titles = results.iter().map(|post| post.title.clone()).collect::<Vec<String>>();
-    json!({
-        "status": "success",
-        "data": titles,
-    })
-}
-
-#[post("/posts", data = "<new_post>")]
-fn create_post(new_post: Json<models::NewPost>) -> Value {
-    use crate::schema::posts::dsl::*;
-
-    let connection = &mut establish_connection();
-    let post = diesel::insert_into(posts)
-        .values(new_post.into_inner())
-        .get_result::<Post>(connection)
-        .expect("Error saving new post");
-
-    json!({
-        "status": "success",
-        "data": post.title,
-    })
-}
-
-#[derive(Deserialize)]
-struct DeletePost {
-    title: String,
-}
-
-#[delete("/posts", data = "<delete_post>")]
-fn delete_post(delete_post: Json<DeletePost>) -> Value {
-    use crate::schema::posts::dsl::*;
-
-    let connection = &mut establish_connection();
-    let num_deleted = diesel::delete(posts.filter(title.eq(delete_post.into_inner().title)))
-        .execute(connection)
-        .expect("Error deleting post");
-
-    json!({
-        "status": "success",
-        "data": num_deleted,
     })
 }
 
@@ -117,6 +65,8 @@ fn default_catch() -> Value {
 #[launch]
 fn rocket() -> _ {
     rocket::build()
-        .mount("/", routes![index, print_name, print_json, fetch_posts, create_post, delete_post])
+        .mount("/", routes![index, print_name, print_json])
+        .mount("/posts", routes![fetch_posts, create_post, delete_post])
+        .mount("/engines", routes![fetch_engines, create_engine, delete_engine])
         .register("/", catchers![not_found, internal_error, unprocessable_entity, default_catch])
 }
